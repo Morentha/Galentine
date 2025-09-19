@@ -11,6 +11,7 @@ public class Main {
 
             // Регистрируем нашего бота
             botsApi.registerBot(new MadBot());
+            DatabaseInit.init();
 
             System.out.println("Бот успешно запущен!");
         } catch (Exception e) {
