@@ -17,8 +17,7 @@ public class DatabaseInit {
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     chat_id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    number INTEGER
+                    number INTEGER UNIQUE
                 );
             """);
 
@@ -40,6 +39,11 @@ public class DatabaseInit {
                     PRIMARY KEY (question_id, user_id)
                 );
             """);
+            stmt.execute("CREATE TABLE IF NOT EXISTS votes (" +
+                    "question_index INTEGER," +
+                    "voter_chat_id INTEGER," +
+                    "vote_for INTEGER," +
+                    "PRIMARY KEY (question_index, voter_chat_id))");
 
             System.out.println("✅ Таблицы успешно созданы/проверены.");
 
