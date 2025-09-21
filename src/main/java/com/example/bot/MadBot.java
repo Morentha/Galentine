@@ -29,6 +29,7 @@ public class MadBot extends TelegramLongPollingBot {
     private static final Integer MAX_USERS = 40;
     private static final String WELCOME_IMAGE_PATH = "src/main/resources/images/welcome.png";
     private static final String QUESTIONS_PATH = "src/main/resources/questions";
+    private static final String INSTANCE_ID = UUID.randomUUID().toString().substring(0, 8);
 
     // Состояния бота
     private enum BotState {
@@ -49,7 +50,8 @@ public class MadBot extends TelegramLongPollingBot {
      * Конструктор бота - инициализирует БД и загружает вопросы
      */
     public MadBot() {
-//        initDatabase();
+        initDatabase();
+        System.out.println("🚀 Запуск инстанса бота: " + INSTANCE_ID);
         loadQuestionImages();
         for (Long adminId : ADMIN_IDS) {
             sendAdminHelp(adminId);
@@ -72,13 +74,15 @@ public class MadBot extends TelegramLongPollingBot {
     @Override
     public void onUpdateReceived(Update update) {
         try {
+            System.out.println("📨 Получено обновление в инстансе: " + INSTANCE_ID);
+
             if (update.hasMessage() && update.getMessage().hasText()) {
                 handleMessage(update);
             } else if (update.hasCallbackQuery()) {
                 handleCallbackQuery(update);
             }
         } catch (Exception e) {
-            System.err.println("Ошибка обработки update: " + e.getMessage());
+            System.err.println("❌ Ошибка в инстансе " + INSTANCE_ID + ": " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -936,14 +940,35 @@ public class MadBot extends TelegramLongPollingBot {
     /**
      * Инициализация базы данных
      */
-//    private void initDatabase() {
-//        try (Connection conn = DriverManager.getConnection(DB_URL);
-//             Statement stmt = conn.createStatement()) {
-//            System.out.println("✅ База данных инициализирована");
-//        } catch (SQLException e) {
-//            System.err.println("❌ Ошибка инициализации БД: " + e.getMessage());
-//        }
-//    }
+    private void initDatabase() {
+        int maxRetries = 3;
+        int retryCount = 0;
+        while (retryCount < maxRetries) {
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("PRAGMA quick_check");
+            System.out.println("✅ База данных инициализирована инстансом: " + INSTANCE_ID);
+        } catch (SQLException e) {
+            retryCount++;
+            System.err.println("⚠️ Попытка " + retryCount + "/" + maxRetries +
+                    " - Ошибка БД: " + e.getMessage());
+
+            if (retryCount >= maxRetries) {
+                System.err.println("❌ Не удалось инициализировать БД после " + maxRetries + " попыток");
+                return;
+            }
+
+            // Ждем перед повторной попыткой
+            try {
+                Thread.sleep(1000 * retryCount);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+
+        }
+        return;
+    }
+}
 
     /**
      * Сохранение пользователя в БД

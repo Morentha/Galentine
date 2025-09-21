@@ -1,0 +1,10 @@
+[deploy]
+numReplicas = 1  # Важно: только 1 реплика для бота!
+
+[build]
+builder = "NIXPACKS"
+
+[[services]]
+name = "galentine-bot"
+startCommand = "java -jar target/madbot-1.0-SNAPSHOT.jar"
+numReplicas = 1  # Критически важно: только одна реплика!
