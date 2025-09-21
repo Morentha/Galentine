@@ -13,42 +13,37 @@ public class DatabaseInit {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement()) {
 
-            // Таблица участников
+            // Таблица участниц
             stmt.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    chat_id INTEGER PRIMARY KEY,
-                    number INTEGER UNIQUE
-                );
-            """);
+            CREATE TABLE IF NOT EXISTS users (
+                chat_id INTEGER PRIMARY KEY,
+                number INTEGER UNIQUE,
+                username TEXT
+            );
+        """);
 
             // Таблица вопросов
             stmt.execute("""
-                CREATE TABLE IF NOT EXISTS questions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    file_path TEXT,
-                    is_active INTEGER DEFAULT 0
-                );
-            """);
+            CREATE TABLE IF NOT EXISTS questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT,
+                is_active INTEGER DEFAULT 0
+            );
+        """);
 
             // Таблица голосов
             stmt.execute("""
-                CREATE TABLE IF NOT EXISTS votes (
-                    question_id INTEGER,
-                    user_id INTEGER,
-                    vote_for INTEGER,
-                    PRIMARY KEY (question_id, user_id)
-                );
-            """);
-            stmt.execute("CREATE TABLE IF NOT EXISTS votes (" +
-                    "question_index INTEGER," +
-                    "voter_chat_id INTEGER," +
-                    "vote_for INTEGER," +
-                    "PRIMARY KEY (question_index, voter_chat_id))");
-
-            System.out.println("✅ Таблицы успешно созданы/проверены.");
+            CREATE TABLE IF NOT EXISTS votes (
+                question_id INTEGER,
+                user_id INTEGER,
+                vote_for INTEGER,
+                PRIMARY KEY (question_id, user_id)
+            );
+        """);
 
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
+
 }

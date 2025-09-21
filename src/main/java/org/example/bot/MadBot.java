@@ -23,7 +23,9 @@ public class MadBot extends TelegramLongPollingBot {
 
     // Конфигурационные константы
     private static final String DB_URL = "jdbc:sqlite:bot.db";
-    private static final Long ADMIN_ID = 257023213L;
+    private static final Set<Long> ADMIN_IDS = new HashSet<>(Arrays.asList(
+            257023213L
+    ));
     private static final Integer MAX_USERS = 40;
     private static final String WELCOME_IMAGE_PATH = "src/main/resources/images/welcome.png";
     private static final String QUESTIONS_PATH = "src/main/resources/questions";
@@ -47,8 +49,11 @@ public class MadBot extends TelegramLongPollingBot {
      * Конструктор бота - инициализирует БД и загружает вопросы
      */
     public MadBot() {
-        initDatabase();
+//        initDatabase();
         loadQuestionImages();
+        for (Long adminId : ADMIN_IDS) {
+            sendAdminHelp(adminId);
+        }
     }
 
     @Override
@@ -87,7 +92,7 @@ public class MadBot extends TelegramLongPollingBot {
         User user = update.getMessage().getFrom();
 
         // Команды админа
-        if (chatId.equals(ADMIN_ID)) {
+        if (ADMIN_IDS.contains(chatId)) {
             handleAdminCommands(text, chatId);
             return;
         }
@@ -102,7 +107,7 @@ public class MadBot extends TelegramLongPollingBot {
         if (text.matches("\\d+")) {
             handleNumberInput(text, chatId, user);
         } else {
-            sendMessage(chatId, "Пожалуйста, введите номер цифрами от 1 до " + MAX_USERS);
+            sendMessage(chatId, "Пожалуйста, в введи номер цифрами от 1 до " + MAX_USERS);
         }
     }
 
@@ -128,12 +133,20 @@ public class MadBot extends TelegramLongPollingBot {
                 clearAllData();
                 sendMessage(chatId, "💥 Все данные полностью очищены!");
                 break;
-            case "/admin_menu":
-                showAdminMenu(chatId);
-                break;
             case "/clear_users":
                 clearAllUsers();
                 sendMessage(chatId, "✅ Список участниц очищен.");
+                break;
+            case "/force_clean":
+                dropUsersTable();
+                handleForceCleanCommand(chatId);
+                break;
+            case "/drop_tables":
+                dropAllTables();
+                sendMessage(chatId, "✅ Все таблицы удалены");
+                break;
+            case "/admin_menu":
+                showAdminMenu(chatId);
                 break;
             case "/status":
                 sendMessage(chatId, makeStatusText());
@@ -144,7 +157,7 @@ public class MadBot extends TelegramLongPollingBot {
                 } else if (text.startsWith("/delete")) {
                     handleDeleteCommand(text, chatId);
                 } else {
-                    sendMessage(chatId, "❌ Неизвестная команда. Используйте /admin_menu для меню");
+                    sendMessage(chatId, "❌ Неизвестная команда. Используй /admin_menu для меню");
                 }
         }
     }
@@ -177,7 +190,7 @@ public class MadBot extends TelegramLongPollingBot {
             try {
                 Long chatIdToDelete = Long.parseLong(parts[1]);
                 deleteUser(chatIdToDelete);
-                sendMessage(chatId, "🗑 Пользователь " + chatIdToDelete + " удалён.");
+                sendMessage(chatId, "🗑 Пользовательница " + chatIdToDelete + " удалена.");
             } catch (NumberFormatException e) {
                 sendMessage(chatId, "❌ Формат: /delete <chat_id>");
             }
@@ -216,6 +229,7 @@ public class MadBot extends TelegramLongPollingBot {
                     case "show_results":
                         showResults(chatId);
                         break;
+
                 }
             }
         } catch (Exception e) {
@@ -233,7 +247,7 @@ public class MadBot extends TelegramLongPollingBot {
         // Проверяем, не голосует ли пользователь за себя
         Long userNumber = getUserNumberFromDB(chatId);
         if (userNumber != null && userNumber == votedNumber) {
-            sendMessage(chatId, "❌ Нельзя голосовать за свой собственный номер!");
+            sendMessage(chatId, "❌ Нельзя голосовать за свой собственный номер...");
             return;
         }
 
@@ -251,7 +265,7 @@ public class MadBot extends TelegramLongPollingBot {
 
         // Уведомление участнику
         sendMessage(chatId, "✅ Ваш голос за номер " + votedNumber + " принят!");
-        sendMessage(chatId, "🗳 Ваш голос очень важен для нас! Оставайтесь на линии, ожидаем остальных участниц...");
+        sendMessage(chatId, "🗳 Ваш голос очень важен для нас! Ожидаем остальных участниц...");
 
         // Удаляем клавиатуру после голосования
         removeInlineKeyboard(chatId, messageId);
@@ -259,17 +273,36 @@ public class MadBot extends TelegramLongPollingBot {
         // Обновляем статус у админа
         updateAdminStatus();
 
-        // Уведомление админа о новом голосе
-        if (!chatId.equals(ADMIN_ID)) {
-            String userLink = getUserLink(chatId);
-            sendMessage(ADMIN_ID, "✅ " + userLink + " проголосовал(а) за номер " + votedNumber);
+        String userLink = getUserLink(chatId);
+        notifyAdmins("✅ " + userLink + " проголосовала за номер " + votedNumber);
+    }
+    private void notifyAdmins(String text) {
+        for (Long adminId : ADMIN_IDS) {
+            sendMessage(adminId, text);
         }
+    }
+    private void sendAdminHelp(Long adminId) {
+        String helpText = "<b>Команды администратора:</b>\n\n" +
+                "/list — список всех участниц\n" +
+                "/start_voting — начать голосование\n" +
+                "/next_question — отправить следующий вопрос\n" +
+                "/show_results — показать результаты текущего вопроса\n" +
+                "/clear_users — очистить список участниц\n" +
+                "/update old new — изменить номер\n" +
+                "/delete chat_id — удалить участницу\n" +
+                "/status — статус голосования\n" +
+                "/nuke — полностью очистить базу\n" +
+                "/admin_menu — открыть меню с кнопками\n" +
+                "/force_clean - снести всю базу данных\n" +
+                "/drop_tables - удалить все таблицы";
+
+        sendMessage(adminId, helpText);
     }
 
     private boolean hasUserVoted(Long chatId, int questionIndex) {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT 1 FROM votes WHERE chat_id=? AND question_index=?")) {
+                     "SELECT 1 FROM votes WHERE user_id=? AND question_id=?")) {
             ps.setLong(1, chatId);
             ps.setInt(2, questionIndex);
             ResultSet rs = ps.executeQuery();
@@ -283,7 +316,7 @@ public class MadBot extends TelegramLongPollingBot {
     private void saveVote(Long chatId, int questionIndex, int votedNumber) {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement ps = conn.prepareStatement(
-                     "INSERT OR REPLACE INTO votes(chat_id, question_index, voted_number) VALUES (?, ?, ?)")) {
+                     "INSERT OR REPLACE INTO votes(user_id, question_id, vote_for) VALUES (?, ?, ?)")) {
             ps.setLong(1, chatId);
             ps.setInt(2, questionIndex);
             ps.setInt(3, votedNumber);
@@ -309,34 +342,36 @@ public class MadBot extends TelegramLongPollingBot {
             // Проверка существования пользователя
             if (userExists(chatId)) {
                 String existingNumber = getUserNumber(chatId);
-                sendMessage(chatId, "❌ Ваш номер уже закреплён: " + existingNumber +
-                        "\nЕсли нужно изменить, свяжитесь с организаторкой.");
+                sendMessage(chatId, "❌ Твой номер уже закреплён: " + existingNumber +
+                        "\nЕсли нужно изменить, свяжись с организаторкой.");
                 return;
             }
 
             // Проверка занятости номера
             if (isNumberTaken(number)) {
-                sendMessage(chatId, "❌ Этот номер уже занят. Выберите другой.");
+                sendMessage(chatId, "❌ Этот номер уже занят. Выбери другой.");
                 return;
             }
 
-            // Сохраняем пользователя
+            // Сохраняем пользователя с username
             saveUser(chatId, number, user);
 
             // Отправляем приветственное сообщение участнику
             String welcomeMessage = "✨ *Твой номер: " + number + "*\n\n" +
                     "Спасибо за регистрацию! Твой номер закреплён за тобой.\n\n" +
-                    "⏳ Ожидай начала голосования! Твой звонок очень важен для нас 💫\n" +
-                    "Мы свяжемся с тобой, когда все участницы будут готовы.";
+                    "⏳ Ожидай начала голосования! Твой голос супер важен для нас. 💫\n" +
+                    "Голосование начнется, когда подключатся все участницы";
 
             sendMessage(chatId, welcomeMessage);
 
             // Уведомление админа о новой регистрации
-            String userLink = getUserLink(user);
+            String userLink = getUserLink(chatId);
             String adminNotification = "👤 Новая регистрация!\n" +
                     userLink + " - номер " + number +
                     "\n\nВсего зарегистрировано: " + getRegisteredCount() + "/" + MAX_USERS;
-            sendMessage(ADMIN_ID, adminNotification);
+            for (Long adminId : ADMIN_IDS) {
+                sendMessage(adminId, adminNotification);
+            }
 
         } catch (NumberFormatException e) {
             sendMessage(chatId, "❌ Пожалуйста, введите корректный номер.");
@@ -357,7 +392,7 @@ public class MadBot extends TelegramLongPollingBot {
             if (!fullName.isEmpty()) {
                 return "<a href=\"tg://user?id=" + user.getId() + "\">" + fullName + "</a>";
             } else {
-                return "<a href=\"tg://user?id=" + user.getId() + "\">Участник " + user.getId() + "</a>";
+                return "<a href=\"tg://user?id=" + user.getId() + "\">Участница " + user.getId() + "</a>";
             }
         }
     }
@@ -367,28 +402,26 @@ public class MadBot extends TelegramLongPollingBot {
      */
     private String getUserLink(Long chatId) {
         try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement ps = conn.prepareStatement("SELECT username, first_name, last_name FROM users WHERE chat_id=?")) {
+             PreparedStatement ps = conn.prepareStatement("SELECT username FROM users WHERE chat_id=?")) {
+
             ps.setLong(1, chatId);
             ResultSet rs = ps.executeQuery();
+
             if (rs.next()) {
                 String username = rs.getString("username");
-                String firstName = rs.getString("first_name");
-                String lastName = rs.getString("last_name");
-
                 if (username != null && !username.isEmpty()) {
-                    return "<a href=\"tg://user?id=" + chatId + "\">@" + username + "</a>";
-                } else {
-                    String fullName = (firstName + " " + (lastName != null ? lastName : "")).trim();
-                    if (!fullName.isEmpty()) {
-                        return "<a href=\"tg://user?id=" + chatId + "\">" + fullName + "</a>";
-                    }
+                    return "<a href=\"https://t.me/" + username + "\">@" + username + "</a>";
                 }
             }
+
         } catch (SQLException e) {
-            System.err.println("Ошибка получения данных пользователя: " + e.getMessage());
+            System.err.println("Ошибка получения username: " + e.getMessage());
         }
-        return "<a href=\"tg://user?id=" + chatId + "\">Участник " + chatId + "</a>";
+
+        // fallback: даже без username можно кидать кликабельную ссылку
+        return "<a href=\"tg://user?id=" + chatId + "\">Участница</a>";
     }
+
 
     /**
      * Начало голосования
@@ -412,15 +445,15 @@ public class MadBot extends TelegramLongPollingBot {
         // Уведомление всем участникам
         List<Long> allUsers = getAllUsers();
         String votingStartMessage = "🎉 *Голосование начинается!*\n\n" +
-                "Сейчас вам придут вопросы один за другим.\n" +
-                "Выбирайте номер, который вам больше всего нравится!\n\n" +
+                "Сейчас тебе придут вопросы один за другим.\n" +
+                "Выбери номер той, кто по твоему мнению подходит больше всего!\n\n" +
                 "💫 Удачи в голосовании!";
 
         for (Long userId : allUsers) {
             sendMessage(userId, votingStartMessage);
         }
 
-        sendMessage(chatId, "🗳 Голосование начато! Уведомления отправлены " + allUsers.size() + " участникам.");
+        sendMessage(chatId, "🗳 Голосование начато! Уведомления отправлены " + allUsers.size() + " участницам.");
         sendNextQuestion(chatId);
     }
 
@@ -470,16 +503,18 @@ public class MadBot extends TelegramLongPollingBot {
                 // Небольшая задержка чтобы не спамить
                 Thread.sleep(100);
             } catch (Exception e) {
-                System.err.println("Ошибка отправки вопроса пользователю " + userId + ": " + e.getMessage());
+                System.err.println("Ошибка отправки вопроса пользовательнице " + userId + ": " + e.getMessage());
             }
         }
 
         // Отправляем вопрос админу
         try {
             SendPhoto adminPhoto = new SendPhoto();
-            adminPhoto.setChatId(ADMIN_ID.toString());
+            for (Long adminId : ADMIN_IDS) {
+                adminPhoto.setChatId(adminId);
+            }
             adminPhoto.setPhoto(new InputFile(imageFile));
-            adminPhoto.setCaption("📨 Вопрос " + (currentQuestionIndex + 1) + " отправлен " + sentCount + " участникам");
+            adminPhoto.setCaption("📨 Вопрос " + (currentQuestionIndex + 1) + " отправлен " + sentCount + " участницам");
             execute(adminPhoto);
         } catch (TelegramApiException e) {
             System.err.println("Ошибка отправки вопроса админу: " + e.getMessage());
@@ -532,18 +567,66 @@ public class MadBot extends TelegramLongPollingBot {
     /**
      * Показать результаты голосования
      */
+//    private void showResults(Long chatId) {
+//        Map<Integer, Integer> voteCounts = new HashMap<>();
+//
+//        // Загружаем голоса из БД
+//        try (Connection conn = DriverManager.getConnection(DB_URL);
+//             PreparedStatement ps = conn.prepareStatement(
+//                     "SELECT vote_for, COUNT(*) as cnt FROM votes WHERE question_id=? GROUP BY vote_for")) {
+//            ps.setInt(1, currentQuestionIndex);
+//            ResultSet rs = ps.executeQuery();
+//
+//            while (rs.next()) {
+//                int votedNumber = rs.getInt("voted_for");
+//                int count = rs.getInt("cnt");
+//                voteCounts.put(votedNumber, count);
+//            }
+//        } catch (SQLException e) {
+//            System.err.println("Ошибка загрузки результатов: " + e.getMessage());
+//        }
+//
+//        if (voteCounts.isEmpty()) {
+//            sendMessage(chatId, "📊 Пока нет голосов для текущего вопроса.");
+//            return;
+//        }
+//
+//        // Формируем текст с результатами
+//        StringBuilder resultText = new StringBuilder("📊 Результаты голосования:\n\n");
+//
+//        voteCounts.entrySet().stream()
+//                .sorted(Map.Entry.<Integer, Integer>comparingByValue().reversed())
+//                .forEach(entry -> {
+//                    resultText.append("№").append(entry.getKey())
+//                            .append(" — ").append(entry.getValue()).append(" голос(ов)\n");
+//                });
+//
+//        sendMessage(chatId, resultText.toString());
+//    }
+
+    /**
+     * Показать результаты голосования
+     */
     private void showResults(Long chatId) {
         Map<Integer, Integer> voteCounts = new HashMap<>();
+        if (currentQuestionResponses.isEmpty() && currentQuestionIndex == 0) {
+            sendMessage(chatId, "❌ Голосов еще нет!");
+            return;
+        }
 
-        // Загружаем голоса из БД
+        // Сохраняем текущие ответы
+        if (currentQuestionIndex > 0) {
+            allResponses.put(currentQuestionIndex - 1, new HashMap<>(currentQuestionResponses));
+        }
+       //  Загружаем голоса из БД
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT voted_number, COUNT(*) as cnt FROM votes WHERE question_index=? GROUP BY voted_number")) {
+                     "SELECT vote_for, COUNT(*) as cnt FROM votes WHERE question_id=? GROUP BY vote_for")) {
             ps.setInt(1, currentQuestionIndex);
             ResultSet rs = ps.executeQuery();
 
             while (rs.next()) {
-                int votedNumber = rs.getInt("voted_number");
+                int votedNumber = rs.getInt("voted_for");
                 int count = rs.getInt("cnt");
                 voteCounts.put(votedNumber, count);
             }
@@ -551,23 +634,58 @@ public class MadBot extends TelegramLongPollingBot {
             System.err.println("Ошибка загрузки результатов: " + e.getMessage());
         }
 
+        // Считаем голоса для текущего вопроса
+        Map<Integer, Integer> voteCount = new HashMap<>();
+        for (Integer vote : currentQuestionResponses.values()) {
+            voteCount.put(vote, voteCount.getOrDefault(vote, 0) + 1);
+        }
+
         if (voteCounts.isEmpty()) {
-            sendMessage(chatId, "📊 Пока нет голосов для текущего вопроса.");
+            sendMessage(chatId, "❌ Нет голосов для текущего вопроса!");
             return;
         }
 
-        // Формируем текст с результатами
-        StringBuilder resultText = new StringBuilder("📊 Результаты голосования:\n\n");
+        // Формируем текст результатов
+        StringBuilder results = new StringBuilder("🏆 Результаты голосования (Вопрос " + currentQuestionIndex + "):\n\n");
 
-        voteCounts.entrySet().stream()
-                .sorted(Map.Entry.<Integer, Integer>comparingByValue().reversed())
-                .forEach(entry -> {
-                    resultText.append("№").append(entry.getKey())
-                            .append(" — ").append(entry.getValue()).append(" голос(ов)\n");
-                });
+        // Сортируем по убыванию голосов
+        List<Map.Entry<Integer, Integer>> sortedResults = voteCounts.entrySet()
+                .stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .collect(Collectors.toList());
 
-        sendMessage(chatId, resultText.toString());
+        for (int i = 0; i < sortedResults.size(); i++) {
+            Map.Entry<Integer, Integer> entry = sortedResults.get(i);
+            double percentage = (double) entry.getValue() / currentQuestionResponses.size() * 100;
+            results.append(i + 1).append(". №").append(entry.getKey())
+                    .append(": ").append(entry.getValue()).append(" голосов (")
+                    .append(String.format("%.1f", percentage)).append("%)\n");
+        }
+
+        results.append("\nВсего проголосовало: ").append(currentQuestionResponses.size())
+                .append("/").append(getRegisteredCount());
+
+        // Отправляем результаты всем участникам
+        List<Long> allUsers = getAllUsers();
+        for (Long userId : allUsers) {
+            sendMessage(userId, results.toString());
+        }
+
+        // Отправляем админу детальную статистику
+        String adminResults = results + "\n\n" + makeStatusText();
+        for(Long adminID:ADMIN_IDS) {
+            sendMessage(adminID, adminResults);
+        }
+
+        // УСТАНОВКА СОСТОЯНИЯ VOTING_COMPLETED ПОСЛЕ ПОКАЗА РЕЗУЛЬТАТОВ
+        currentState = BotState.VOTING_COMPLETED;
+
+        // Дополнительное сообщение о завершении голосования
+        for (Long adminID:ADMIN_IDS) {
+            sendMessage(adminID, "✅ Голосование завершено! Статус: " + currentState);
+        }
     }
+
 
 
     /**
@@ -608,7 +726,9 @@ public class MadBot extends TelegramLongPollingBot {
             if (adminMessageId == null) {
                 // Отправляем новое сообщение админу и сохраняем его id
                 SendMessage message = new SendMessage();
-                message.setChatId(ADMIN_ID.toString());
+                for (Long adminId : ADMIN_IDS) {
+                    message.setChatId(adminId);
+                }
                 message.setText(statusText);
                 message.setReplyMarkup(createAdminKeyboard());
                 message.setParseMode("HTML");
@@ -621,7 +741,9 @@ public class MadBot extends TelegramLongPollingBot {
             } else {
                 // Редактируем уже отправленное сообщение (EditMessageText)
                 EditMessageText edit = new EditMessageText();
-                edit.setChatId(ADMIN_ID.toString());
+                for (Long adminId : ADMIN_IDS) {
+                    edit.setChatId(adminId);
+                }
                 edit.setMessageId(adminMessageId); // id ранее сохранённого сообщения
                 edit.setText(statusText);
                 edit.setReplyMarkup(createAdminKeyboard());
@@ -814,21 +936,14 @@ public class MadBot extends TelegramLongPollingBot {
     /**
      * Инициализация базы данных
      */
-    private void initDatabase() {
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE IF NOT EXISTS users (" +
-                    "chat_id INTEGER PRIMARY KEY, " +
-                    "number INTEGER UNIQUE, " +
-                    "username TEXT, " +
-                    "first_name TEXT, " +
-                    "last_name TEXT, " +
-                    "registered_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
-            System.out.println("✅ База данных инициализирована");
-        } catch (SQLException e) {
-            System.err.println("❌ Ошибка инициализации БД: " + e.getMessage());
-        }
-    }
+//    private void initDatabase() {
+//        try (Connection conn = DriverManager.getConnection(DB_URL);
+//             Statement stmt = conn.createStatement()) {
+//            System.out.println("✅ База данных инициализирована");
+//        } catch (SQLException e) {
+//            System.err.println("❌ Ошибка инициализации БД: " + e.getMessage());
+//        }
+//    }
 
     /**
      * Сохранение пользователя в БД
@@ -836,21 +951,20 @@ public class MadBot extends TelegramLongPollingBot {
     private void saveUser(Long chatId, Long number, User user) {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement ps = conn.prepareStatement(
-                     "INSERT INTO users(chat_id, number, username, first_name, last_name) VALUES (?, ?, ?, ?, ?)")) {
+                     "INSERT INTO users(chat_id, number, username) VALUES (?, ?, ?)")) {
+
+            String username = user.getUserName();
+            if (username == null || username.isEmpty()) {
+                username = "Участница"; // если нет ника
+            }
 
             ps.setLong(1, chatId);
             ps.setLong(2, number);
             ps.setString(3, user.getUserName());
-            ps.setString(4, user.getFirstName());
-            ps.setString(5, user.getLastName());
             ps.executeUpdate();
 
         } catch (SQLException e) {
-            if (e.getMessage().contains("UNIQUE")) {
-                System.err.println("Попытка повторной регистрации: " + chatId + " → " + number);
-            } else {
-                System.err.println("Ошибка сохранения пользователя: " + e.getMessage());
-            }
+            e.printStackTrace();
         }
     }
 
@@ -966,23 +1080,36 @@ public class MadBot extends TelegramLongPollingBot {
      */
     private String listUsers() {
         StringBuilder sb = new StringBuilder("📋 Зарегистрированные участники:\n\n");
+        int count = 0;
+
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM users ORDER BY number")) {
+             ResultSet rs = stmt.executeQuery("SELECT number, username FROM users ORDER BY number ASC")) {
 
-            int count = 0;
             while (rs.next()) {
+                Long number = rs.getLong("number");
+                String username = rs.getString("username");
+
+                if (username == null || username.isEmpty()) {
+                    username = "Участница"; // fallback
+                } else if (!username.startsWith("@")) {
+                    username = "@" + username;
+                }
+
+                sb.append("№").append(number).append(" - ").append(username).append("\n");
                 count++;
-                String userLink = getUserLink(rs.getLong("chat_id"));
-                sb.append("№").append(rs.getInt("number"))
-                        .append(" - ").append(userLink).append("\n");
             }
-            sb.append("\nВсего: ").append(count).append("/").append(MAX_USERS);
 
         } catch (SQLException e) {
-            System.err.println("Ошибка получения списка пользователей: " + e.getMessage());
+            e.printStackTrace();
         }
-        return sb.toString().isEmpty() ? "📭 Нет зарегистрированных участников" : sb.toString();
+
+        if (count == 0) {
+            return "❌ Пока никто не зарегистрирован.";
+        }
+
+        sb.append("\nВсего: ").append(count).append("/").append(MAX_USERS);
+        return sb.toString();
     }
 
     /**
@@ -1045,5 +1172,70 @@ public class MadBot extends TelegramLongPollingBot {
         } catch (SQLException e) {
             System.err.println("❌ Ошибка очистки БД: " + e.getMessage());
         }
+    }
+    /**
+     * Полное удаление всех таблиц из базы данных
+     */
+    private void dropAllTables() {
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement()) {
+
+            // Получаем список всех таблиц в базе данных
+            ResultSet rs = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='table'");
+
+            List<String> tables = new ArrayList<>();
+            while (rs.next()) {
+                tables.add(rs.getString("name"));
+            }
+
+            // Удаляем каждую таблицу
+            for (String table : tables) {
+                if (!table.equals("sqlite_sequence")) { // Пропускаем системную таблицу
+                    stmt.execute("DROP TABLE IF EXISTS " + table);
+                    System.out.println("✅ Таблица удалена: " + table);
+                }
+            }
+
+            System.out.println("🗑️ Удалено таблиц: " + tables.size());
+
+        } catch (SQLException e) {
+            System.err.println("❌ Ошибка удаления таблиц: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Удаление конкретной таблицы users
+     */
+    private void dropUsersTable() {
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement()) {
+
+            stmt.execute("DROP TABLE IF EXISTS users");
+            System.out.println("✅ Таблица 'users' удалена");
+
+        } catch (SQLException e) {
+            System.err.println("❌ Ошибка удаления таблицы users: " + e.getMessage());
+        }
+    }
+    /**
+     * Обработка команды /force_clean - полная очистка БД
+     */
+    private void handleForceCleanCommand(Long chatId) {
+        if (!ADMIN_IDS.contains(chatId)) {
+            sendMessage(chatId, "❌ Эта команда только для администратора");
+            return;
+        }
+
+        dropAllTables();
+
+        // Сбрасываем все состояния
+        currentState = BotState.IDLE;
+        currentQuestionIndex = 0;
+        currentQuestionResponses.clear();
+        allResponses.clear();
+        adminMessageId = null;
+
+        sendMessage(chatId, "💥 База данных полностью очищена и пересоздана!\n" +
+                "Все таблицы удалены, состояние сброшено.");
     }
 }
