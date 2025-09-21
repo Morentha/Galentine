@@ -1,9 +1,9 @@
-package org.example.bot;
+package org.example;
 
+import org.example.bot.DatabaseInit;
+import org.example.bot.MadBot;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
-
-import java.sql.SQLException;
 
 public class Main {
     public static void main(String[] args) {
