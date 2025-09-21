@@ -1,7 +1,7 @@
-package org.example;
+package com.example;
 
-import org.example.bot.DatabaseInit;
-import org.example.bot.MadBot;
+import com.example.bot.DatabaseInit;
+import com.example.bot.MadBot;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 

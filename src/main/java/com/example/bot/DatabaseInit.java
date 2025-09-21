@@ -1,4 +1,4 @@
-package org.example.bot;
+package com.example.bot;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
