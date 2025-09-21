@@ -77,7 +77,7 @@
                     </descriptorRefs>
                     <archive>
                         <manifest>
-                            <mainClass>com.example.bot.MadBot</mainClass>
+                            <mainClass>com.example.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
